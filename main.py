@@ -215,8 +215,6 @@ def main():
             print(
                 check_upper_case_letter(pdf_file)
             )  # Output True/False for uppercase check
-            # Break so it ends out of the loop.
-            break  # Exit the loop after first uppercase match
 
     # Walk through the directory and extract .pdf files
     files = walk_directory_and_extract_given_file_extension(
