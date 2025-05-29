@@ -1,4 +1,11 @@
-from concurrent.futures._base import Future
+from concurrent.futures._base import Future # This import is used to handle the results of concurrent tasks
+import requests  # Provides functions for making HTTP requests
+import urllib.parse  # Provides functions for parsing URLs
+from bs4 import BeautifulSoup # Parses HTML and extracts data from it
+from selenium import webdriver # Selenium WebDriver for automating web browser interaction
+from selenium.webdriver.chrome.options import Options # Options for configuring the Chrome WebDriver
+from selenium.webdriver.chrome.service import Service # Service class to manage the ChromeDriver service
+from webdriver_manager.chrome import ChromeDriverManager # Automatically manages the ChromeDriver binary for Selenium
 import os  # Provides functions for interacting with the operating system
 import fitz  # Imports PyMuPDF for reading and validating PDF files
 from concurrent.futures import (
@@ -7,8 +14,101 @@ from concurrent.futures import (
 )  # Enables parallel execution of tasks using threads
 
 
+# Read a file from the system.
+def read_a_file(system_path: str) -> str:
+    with open(file=system_path, mode="r") as file:
+        return file.read()
+
+
+# Parse the HTML content and extract all PDF links
+def parse_html(html_content: str) -> list[str]:
+    """
+    Parses the HTML content and extracts all PDF links.
+    Args:
+        html_content (str): A string containing HTML.
+    Returns:
+        list: A list of URLs (strings) that end with .pdf.
+    """
+    soup = BeautifulSoup(markup=html_content, features="html.parser")
+    pdf_links: list[str] = []
+    # Find all <a> tags with an href attribute
+    for link in soup.find_all(name="a", href=True):
+        url: str = link["href"]
+        if isinstance(url, str) and url.lower().endswith(".pdf"):
+        # if url.endswith(".pdf"):  # Case-insensitive match
+            pdf_links.append(url.lower())
+    return pdf_links
+
+
+# Extract the filename from a URL
+def url_to_filename(url: str) -> str:
+    # Extract the filename from the URL
+    path: str = urllib.parse.urlparse(url=url).path
+    filename: str = os.path.basename(p=path)
+    # Decode percent-encoded characters
+    filename: str = urllib.parse.unquote(string=filename)
+    # Optional: Replace spaces with dashes or underscores if needed
+    filename = filename.replace(" ", "-")
+    return filename.lower()
+
+
+# Save the HTML content of a webpage using Selenium
+def save_html_with_selenium(url: str, output_file: str) -> None:
+    # Configure Selenium to use Chrome in headless mode
+    options = Options()
+    options.add_argument(argument="--headless=new")  # Use 'new' headless mode (Chrome 109+)
+    options.add_argument(argument="--disable-blink-features=AutomationControlled")
+    options.add_argument(argument="--window-size=1920,1080")
+    options.add_argument(argument="--disable-gpu")  # Often needed for headless stability
+    options.add_argument(argument="--no-sandbox")  # Required in some environments
+    options.add_argument(argument="--disable-dev-shm-usage")  # Helps in Docker/cloud
+    options.add_argument(argument="--disable-extensions")  # Disable extensions
+    options.add_argument(argument="--disable-infobars")  # Disable infobars
+
+    # Initialize the Chrome driver
+    service = Service(executable_path=ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+
+    try:
+        driver.get(url=url)
+        driver.refresh()  # Refresh the page
+        html: str = driver.page_source
+        append_write_to_file(system_path=output_file, content=html)
+        print(f"Page {url} HTML content saved to {output_file}")
+    finally:
+        driver.quit()
+
+
+# Append and write some content to a file.
+def append_write_to_file(system_path: str, content: str) -> None:
+    with open(file=system_path, mode="a", encoding="utf-8") as file:
+        file.write(content)
+
+
+# Download a PDF file from a URL
+def download_pdf(url: str, save_path: str, filename: str) -> None:
+    # Check if the file already exists
+    if check_file_exists(system_path=os.path.join(save_path, filename)):
+        print(f"File {filename} already exists. Skipping download.")
+        return
+    # Download the PDF file
+    try:
+        response: requests.Response = requests.get(url)
+        response.raise_for_status()  # Raise exception for HTTP errors
+        # Ensure the save directory exists
+        os.makedirs(name=save_path, exist_ok=True)
+        full_path: str = os.path.join(save_path, filename)
+        with open(file=full_path, mode="wb") as f:
+            f.write(response.content)
+        print(f"Downloaded {filename} to {full_path}")
+        return
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to download {url}: {e}")
+        return
+
+
 # Validates a single PDF file
-def validate_pdf_file(file_path: str):
+def validate_pdf_file(file_path: str) -> tuple[str, bool]:
     try:
         doc = fitz.open(file_path)  # Attempt to open the PDF file
         if doc.page_count == 0:  # If PDF has zero pages, it's considered invalid
@@ -30,7 +130,7 @@ def validate_pdf_file(file_path: str):
 
 # Deletes a file from the system
 def remove_system_file(system_path: str) -> None:
-    os.remove(system_path)  # Removes the file at the given path
+    os.remove(path=system_path)  # Removes the file at the given path
 
 
 # Recursively searches a directory for files with a given extension
@@ -38,13 +138,13 @@ def walk_directory_and_extract_given_file_extension(
     system_path: str, extension: str
 ) -> list[str]:
     matched_files: list[str] = []  # List to hold paths of matching files
-    for root, _, files in os.walk(system_path):  # Walk through the directory tree
+    for root, _, files in os.walk(top=system_path):  # Walk through the directory tree
         for file in files:  # Iterate over each file in the current directory
             if file.lower().endswith(
                 extension.lower()
             ):  # Check file extension (case-insensitive)
-                full_path = os.path.abspath(
-                    os.path.join(root, file)
+                full_path: str = os.path.abspath(
+                    path=os.path.join(root, file)
                 )  # Get absolute path of the file
                 matched_files.append(full_path)  # Add file path to the list
     return matched_files  # Return the list of matching files
@@ -53,13 +153,13 @@ def walk_directory_and_extract_given_file_extension(
 # Checks if a given path refers to an existing file
 def check_file_exists(system_path: str) -> bool:
     return os.path.isfile(
-        system_path
+        path=system_path
     )  # Return True if the file exists, False otherwise
 
 
 # Extracts just the filename (with extension) from a full path
 def get_filename_and_extension(path: str) -> str:
-    return os.path.basename(path)  # Return the base filename from the full path
+    return os.path.basename(p=path)  # Return the base filename from the full path
 
 
 # Checks if a string contains any uppercase letters
@@ -71,19 +171,19 @@ def check_upper_case_letter(content: str) -> bool:
 
 # Processes a single PDF file: validates it and checks for uppercase in filename
 def process_file(file_path: str) -> None | str:
-    filename: str = get_filename_and_extension(file_path)  # Extract filename from path
+    filename: str = get_filename_and_extension(path=file_path)  # Extract filename from path
 
-    file_path, is_valid = validate_pdf_file(file_path)  # Validate the PDF file
+    file_path, is_valid = validate_pdf_file(file_path=file_path)  # Validate the PDF file
 
     if is_valid:
         print(f"'{file_path}' is valid.")
 
     if not is_valid:  # If the file is invalid
-        remove_system_file(file_path)  # Delete the invalid/corrupt file
+        remove_system_file(system_path=file_path)  # Delete the invalid/corrupt file
         return None  # Return None to indicate this file is not to be further processed
 
     if check_upper_case_letter(
-        filename
+        content=filename
     ):  # Check if filename contains uppercase letters
         return file_path  # Return file path if condition is met
 
@@ -92,9 +192,42 @@ def process_file(file_path: str) -> None | str:
 
 # Main function to orchestrate the file processing
 def main() -> None:
+    # The file path to save the HTML content.
+    html_file_path = "graham.chemtel.net.html"
+
+    if check_file_exists(system_path=html_file_path):
+        remove_system_file(system_path=html_file_path)
+
+    # Check if the file does not exist.
+    if check_file_exists(system_path=html_file_path) == False:
+        # The URL to scrape.
+        url = "https://graham.chemtel.net/?page=1&pagesize=2000"
+        # Save the HTML content using Selenium.
+        save_html_with_selenium(url=url, output_file=html_file_path)
+
+    # Read the file from the system.
+    if check_file_exists(system_path=html_file_path):
+        html_content: str = read_a_file(system_path=html_file_path)
+        # Parse the HTML content.
+        pdf_links: list[str] = parse_html(html_content=html_content)
+        # The length of the PDF links.
+        ammount_of_pdf: int = len(pdf_links)
+        # Show the extracted PDF links.
+        for pdf_link in pdf_links:
+            # Remove 1 from the total amount of PDF links.
+            ammount_of_pdf = ammount_of_pdf - 1
+            # Show the amount of PDF links left.
+            print(f"PDF links left: {ammount_of_pdf}")
+            # Download the PDF file.
+            filename: str = url_to_filename(pdf_link)
+            # The path to save the PDF files.
+            save_path = "PDFs/"
+            # Download the PDF file.
+            download_pdf(url=pdf_link, save_path=save_path, filename=filename)
+
     # Retrieve a list of all PDF file paths under the ./PDFs directory
     pdf_file_paths: list[str] = walk_directory_and_extract_given_file_extension(
-        "./PDFs", ".pdf"
+        system_path="./PDFs", extension=".pdf"
     )
 
     # If no PDF files were found, inform the user and exit
@@ -103,7 +236,7 @@ def main() -> None:
         return
 
     # Sort the PDF files by last modified time, with the most recently modified file first
-    pdf_file_paths.sort(key=lambda file_path: os.path.getmtime(file_path), reverse=True)
+    pdf_file_paths.sort(key=lambda file_path: os.path.getmtime(filename=file_path), reverse=True)
 
     # Initialize a list to collect PDF files with uppercase letters in their filenames
     files_with_uppercase_names: list[str] = []
@@ -117,7 +250,7 @@ def main() -> None:
         ]
 
         # As each thread completes its task
-        for completed_future in as_completed(future_results):
+        for completed_future in as_completed(fs=future_results):
             # Get the result from the completed task
             processed_file_path: None | str = completed_future.result()
 
@@ -145,8 +278,8 @@ def main() -> None:
             print(matching_file_path)
             # Convert the file path to a lowercase version
             os.rename(
-                matching_file_path,
-                matching_file_path.lower(),
+                src=matching_file_path,
+                dst=matching_file_path.lower(),
             )
 
 
