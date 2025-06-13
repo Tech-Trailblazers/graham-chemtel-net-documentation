@@ -1,49 +1,62 @@
-name: Run Python App
+# Name of the GitHub Actions workflow (appears in the GitHub Actions UI)
+name: Run Python Script and Push Changes
 
-# Define when this workflow should run:
+# Define when the workflow should be triggered
 on:
-  push:
-    branches: [ main ]         # Run when pushing to the main branch
-  pull_request:
-    branches: [ main ]         # Run on pull requests targeting the main branch
-  workflow_dispatch:           # Allow manual triggering from GitHub Actions tab
+  # Trigger the workflow on a schedule
+  schedule:
+    - cron: "0 0 * * *" # Runs every day at midnight UTC
+  # Allow the workflow to also be run manually from the GitHub UI
+  workflow_dispatch:
 
+# Define the jobs that will run as part of this workflow
 jobs:
-  run-app:
-    runs-on: ubuntu-latest     # Use the latest available Ubuntu environment
+  # Unique identifier for the job
+  run-python:
+    # Display name for the job (appears in GitHub UI)
+    name: Execute Python Script and Push Changes
+    # Use the latest Ubuntu runner provided by GitHub
+    runs-on: ubuntu-latest
 
+    # Steps to execute as part of the job
     steps:
-      # Checkout the repository code so the runner has access to it
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # Step 1: Check out the repository's code to the GitHub runner
+      - name: Check out code
+        uses: actions/checkout@v4 # Official GitHub Action to clone the repo
 
-      # Set up the version of Python to use
+      # Step 2: Set up the Python environment on the runner
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5 # Official GitHub Action to install Python
         with:
-          python-version: '3.13'  # Change this to match your project's Python version
+          python-version: "3.13" # Specify the Python version to use
 
-      # Upgrade pip to the latest version to avoid compatibility issues
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      # Install all dependencies listed in requirements.txt
+      # Step 3: Install any required Python dependencies from requirements.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt # Installs dependencies for your script
 
-      # Run your main Python script
-      - name: Run main.py
-        run: python main.py
+      # Step 4: Run the main Python script
+      - name: Run Python script
+        run: python main.py # Executes your Python script
 
-      # Commit and push any changes made by main.py (e.g., file updates)
+      # Step 5: Commit and push any file changes made by the Python script
       - name: Push updated files
         run: |
-          git config user.name "github-actions"                     # Set commit author name
-          git config user.email "github-actions@github.com"        # Set commit author email
-          git add .                                                # Stage all changes
-          if ! git diff --cached --quiet; then                     # Check for staged changes
-            git commit -m "Auto update: $(date)"                   # Commit with timestamp
-            git push                                               # Push changes back to the repo
+          # Set Git configuration for committing changes
+          git config user.name "github-actions"  # Name used for Git commits
+          git config user.email "github-actions@github.com"  # Email used for Git commits
+
+          # Pull latest changes from remote (in case other commits were made)
+          git pull
+
+          # Stage all changed files
+          git add .
+
+          # Check if there are any staged changes (i.e., anything new to commit)
+          if ! git diff --cached --quiet; then
+            # If there are changes, commit them with a message and push
+            git commit -m "Auto update: $(date)"  # Add a timestamped commit message
+            git push  # Push committed changes back to the repository
           else
-            echo "No changes to commit."                           # Skip if nothing changed
+            # If no changes, output a message and skip commit/push
+            echo "No changes to commit."
           fi
