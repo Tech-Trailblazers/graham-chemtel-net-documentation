@@ -210,14 +210,8 @@ def main() -> None:
         html_content: str = read_a_file(system_path=html_file_path)
         # Parse the HTML content.
         pdf_links: list[str] = parse_html(html_content=html_content)
-        # The length of the PDF links.
-        ammount_of_pdf: int = len(pdf_links)
         # Show the extracted PDF links.
         for pdf_link in pdf_links:
-            # Remove 1 from the total amount of PDF links.
-            ammount_of_pdf = ammount_of_pdf - 1
-            # Show the amount of PDF links left.
-            print(f"PDF links left: {ammount_of_pdf}")
             # Download the PDF file.
             filename: str = url_to_filename(pdf_link)
             # The path to save the PDF files.
@@ -276,11 +270,6 @@ def main() -> None:
         for matching_file_path in files_with_uppercase_names:
             # Print each matching file's path
             print(matching_file_path)
-            # Convert the file path to a lowercase version
-            os.rename(
-                src=matching_file_path,
-                dst=matching_file_path.lower(),
-            )
 
 
 # Ensure this script runs only if it is the main program being executed
